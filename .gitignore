@@ -1,0 +1,22 @@
+# Ignore output directory
+output/
+
+# Ignore virtual environment
+venv/
+.env
+
+# Ignore cache and log files
+*.log
+*.cache
+
+# Ignore compiled Python files
+__pycache__/
+
+# Ignore editor/IDE specific files
+.vscode/
+.idea/
+
+# Ignore configuration files
+*.yml
+*.yaml
+*.env
