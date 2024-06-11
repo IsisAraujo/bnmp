@@ -6,6 +6,7 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.action_chains import ActionChains
 from selenium.common.exceptions import NoSuchElementException
 import time
 import random
@@ -41,58 +42,6 @@ PECA_MAP = {
     "Guia de Internação (Acervo da Execução)": 13,
     "Certidão de Alteração de Unidade ou Regime Prisional": 14
 }
-
-class ReCaptchaBypasser:
-    def __init__(self, chrome_driver_path, chrome_extension_path):
-        self.chrome_driver_path = chrome_driver_path
-        self.chrome_extension_path = chrome_extension_path
-        self.driver = None
-
-    def initialize_driver(self):
-        # Chrome options
-        chrome_options = Options()
-        chrome_options.add_extension(self.chrome_extension_path)
-
-        # Service object
-        service = Service(self.chrome_driver_path)
-
-        # Initializing the driver with service object
-        self.driver = webdriver.Chrome(service=service, options=chrome_options)
-
-    def bypass_recaptcha(self, page_url):
-        self.driver.get(page_url)
-        time.sleep(2)
-
-        try:
-            iframe = self.driver.find_element(By.XPATH, '//iframe[@title="reCAPTCHA"]')
-            self.driver.switch_to.frame(iframe)
-
-            checkbox = self.driver.find_element(By.CLASS_NAME, 'recaptcha-checkbox-border')
-            checkbox.click()
-            self.driver.implicitly_wait(5)
-        except NoSuchElementException:
-            self.driver.quit()
-            exit()
-
-        self.driver.switch_to.default_content()
-
-        try:
-            challenge_iframe = self.driver.find_element(By.XPATH, '//iframe[@title="recaptcha challenge expires in two minutes"]')
-            self.driver.switch_to.frame(challenge_iframe)
-
-            buster_button = self.driver.find_element(By.XPATH, '//*[@id="rc-imageselect"]/div[3]/div[2]/div[1]/div[1]/div[4]')
-            buster_button.click()
-            time.sleep(4)
-        except NoSuchElementException:
-            self.driver.quit()
-            exit()
-
-        self.driver.switch_to.default_content()
-        time.sleep(8)
-
-    def quit(self):
-        if self.driver:
-            self.driver.quit()
 
 class BNMPScraper:
     def __init__(self, cookies, driver):
@@ -146,12 +95,12 @@ class BNMPScraper:
 
         self.save_json(all_data)
         self.save_excel(all_data)
-        
+        df = pd.DataFrame(all_data)
 
         # Loop para processar IDs e peças e salvar as respostas
-        for row in all_data[1:]:
-            id = row[0]
-            peca_descricao = row[7]
+        for idx, row in df.iterrows():  # Itera sobre as linhas do DataFrame
+            id = row['id']
+            peca_descricao = row['descricaoPeca']
             peca_id = PECA_MAP.get(peca_descricao)
 
             if peca_id:
@@ -169,8 +118,47 @@ class BNMPScraper:
                 }
             save_response(result, RESPONSES_FILE)
 
+    def fetch_data_by_id_and_peca(self, id, peca_id):
+        all_responses = []
+        page = 0
+        while True:
+            url = f'https://portalbnmp.cnj.jus.br/bnmpportal/api/certidaos/{id}/{peca_id}?page={page}'
+            response = requests.get(url, cookies=self.cookies, headers=HEADERS)
+            status_code = response.status_code
+            print(f"Requisição para o ID {id}, Peça ID {peca_id}, Página {page} feita... Status {status_code}")
+
+            if status_code == 200:
+                response_data = response.json()
+                all_responses.extend(response_data)
+
+                if len(response_data) < MAX_ITEMS_PER_PAGE:
+                    break  # No more pages to fetch
+
+                page += 1  # Move to the next page
+            else:
+                return {"error": f"Erro ao obter dados para o ID {id}, Peça ID {peca_id}, Página {page}: Status {status_code}"}
+
+        self.processed_ids_count += 1
+        if self.processed_ids_count % REFRESH_THRESHOLD == 0:
+            self.move_mouse_and_click()
+            self.driver.refresh()
+            self.random_sleep()
+        
+        return all_responses
+
     def random_sleep(self):
         time.sleep(random.uniform(0, 3))  # Sleep for a random time between 0 and 3 seconds
+
+    def move_mouse_and_click(self):
+        action = ActionChains(self.driver)
+        # Movimenta o mouse
+        for _ in range(5):
+            action.move_by_offset(random.randint(-10, 10), random.randint(-10, 10)).perform()
+            time.sleep(1)
+        # Clique no meio da tela
+        width = self.driver.execute_script("return window.innerWidth")
+        height = self.driver.execute_script("return window.innerHeight")
+        action.move_to_element_with_offset(self.driver.find_element(By.TAG_NAME, 'body'), width / 2, height / 2).click().perform()
 
     @staticmethod
     def save_json(data):
@@ -185,29 +173,6 @@ class BNMPScraper:
         df.to_excel(EXCEL_FILE, index=False)
         print(f"Arquivo '{EXCEL_FILE}' criado com sucesso.")
 
-    def fetch_data_by_id_and_peca(self, id, peca_id):
-        all_responses = []
-        for page in range():
-            url = f'https://portalbnmp.cnj.jus.br/bnmpportal/api/certidaos/{id}/{peca_id}'
-            response = requests.get(url, cookies=self.cookies, headers=HEADERS)
-            status_code = response.status_code
-            print(f"Requisição para o ID {id}, Peça ID {peca_id}, Página {page} feita... Status {status_code}")
-
-            if status_code == 200:
-                all_responses.extend(response.json())
-            else:
-                return {"error": f"Erro ao obter dados para o ID {id}, Peça ID {peca_id}, Página {page}: Status {status_code}"}
-
-            if len(response.json()) < MAX_ITEMS_PER_PAGE:
-                break
-
-        self.processed_ids_count += 1
-        if self.processed_ids_count % REFRESH_THRESHOLD == 0:
-            self.driver.refresh()
-            self.random_sleep()
-        
-        return all_responses
-
 def save_response(result, file_path):
     with open(file_path, 'a', encoding='utf-8') as file:
         json.dump(result, file, ensure_ascii=False)
@@ -215,18 +180,25 @@ def save_response(result, file_path):
 
 if __name__ == "__main__":
     chrome_driver_path = "/usr/bin/chromedriver"  # Make sure the path is correct
-    chrome_extension_path = "buster.crx"  # Path to Buster extension
 
-    recaptcha_bypasser = ReCaptchaBypasser(chrome_driver_path, chrome_extension_path)
-    recaptcha_bypasser.initialize_driver()
-    recaptcha_bypasser.bypass_recaptcha("https://portalbnmp.cnj.jus.br/#/captcha/")
+    # Initialize the driver
+    chrome_options = Options()
+    service = Service(chrome_driver_path)
+    driver = webdriver.Chrome(service=service, options=chrome_options)
+
+    # Open the CAPTCHA page
+    driver.get("https://portalbnmp.cnj.jus.br/#/captcha/")
+
+    # Manual step: Wait for the user to solve the CAPTCHA
+    input("Press Enter after you have solved the CAPTCHA manually...")
 
     # Fetching cookies after solving CAPTCHA
-    cookies = recaptcha_bypasser.driver.get_cookies()
+    cookies = driver.get_cookies()
     cookies_dict = {cookie['name']: cookie['value'] for cookie in cookies}
 
-    scraper = BNMPScraper(cookies_dict, recaptcha_bypasser.driver)
+    # Initialize scraper with cookies and driver
+    scraper = BNMPScraper(cookies_dict, driver)
     scraper.scrape()
 
     # Closing the browser window
-    recaptcha_bypasser.quit()
+    driver.quit()
