@@ -16,30 +16,12 @@ EXCEL_FILE = 'output/2.dados_gerais.xlsx'
 BNMP_URL = 'https://portalbnmp.cnj.jus.br/bnmpportal/api/pesquisa-pecas/filter'
 MAX_ITEMS_PER_PAGE = 30
 RENEW_REQUEST_THRESHOLD = 40
-REFRESH_THRESHOLD = 300
-RESPONSES_FILE = 'output/3.todas_respostas.json'  # Novo arquivo de saída
 
 HEADERS = {
     'User-Agent': (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/86.0.4240.198 Safari/537.36"
     )
-}
-PECA_MAP = {
-    "Mandado de Prisão": 1,
-    "Contramandado": 2,
-    "Guia de Recolhimento": 3,
-    "Guia de Internamento": 4,
-    "Alvará de Soltura": 5,
-    "Documento de Desinternamento": 6,
-    "Certidão de Cumprimento das Prisões": 7,
-    "Certidão de Extinção de Punibilidade": 8,
-    "Certidão de Cumprimentos das Internações": 9,
-    "Mandado de Internação": 10,
-    "Guia de Recolhimento (Acervo da Execução)": 11,
-    "Certidão de arquivamento de guia": 12,
-    "Guia de Internação (Acervo da Execução)": 13,
-    "Certidão de Alteração de Unidade ou Regime Prisional": 14
 }
 
 class ReCaptchaBypasser:
@@ -100,7 +82,6 @@ class BNMPScraper:
         self.params = {'page': '0', 'size': str(MAX_ITEMS_PER_PAGE), 'sort': ''}
         self.json_data = {'buscaOrgaoRecursivo': False, 'orgaoExpeditor': {}, 'idEstado': 25}
         self.driver = driver
-        self.processed_ids_count = 0  # Inicializa o contador de IDs processados
 
     def make_request(self):
         try:
@@ -146,28 +127,6 @@ class BNMPScraper:
 
         self.save_json(all_data)
         self.save_excel(all_data)
-        
-
-        # Loop para processar IDs e peças e salvar as respostas
-        for row in all_data[1:]:
-            id = row[0]
-            peca_descricao = row[7]
-            peca_id = PECA_MAP.get(peca_descricao)
-
-            if peca_id:
-                response = self.fetch_data_by_id_and_peca(id, peca_id)
-                result = {
-                    "id": id,
-                    "peca": peca_descricao,
-                    "response": response
-                }
-            else:
-                result = {
-                    "id": id,
-                    "peca": peca_descricao,
-                    "error": f"Peça '{peca_descricao}' não encontrada no dicionário de peças."
-                }
-            save_response(result, RESPONSES_FILE)
 
     def random_sleep(self):
         time.sleep(random.uniform(0, 3))  # Sleep for a random time between 0 and 3 seconds
@@ -185,34 +144,7 @@ class BNMPScraper:
         df.to_excel(EXCEL_FILE, index=False)
         print(f"Arquivo '{EXCEL_FILE}' criado com sucesso.")
 
-    def fetch_data_by_id_and_peca(self, id, peca_id):
-        all_responses = []
-        for page in range():
-            url = f'https://portalbnmp.cnj.jus.br/bnmpportal/api/certidaos/{id}/{peca_id}'
-            response = requests.get(url, cookies=self.cookies, headers=HEADERS)
-            status_code = response.status_code
-            print(f"Requisição para o ID {id}, Peça ID {peca_id}, Página {page} feita... Status {status_code}")
-
-            if status_code == 200:
-                all_responses.extend(response.json())
-            else:
-                return {"error": f"Erro ao obter dados para o ID {id}, Peça ID {peca_id}, Página {page}: Status {status_code}"}
-
-            if len(response.json()) < MAX_ITEMS_PER_PAGE:
-                break
-
-        self.processed_ids_count += 1
-        if self.processed_ids_count % REFRESH_THRESHOLD == 0:
-            self.driver.refresh()
-            self.random_sleep()
-        
-        return all_responses
-
-def save_response(result, file_path):
-    with open(file_path, 'a', encoding='utf-8') as file:
-        json.dump(result, file, ensure_ascii=False)
-        file.write('\n')  # Adiciona uma nova linha após cada resultado
-
+# Example of usage
 if __name__ == "__main__":
     chrome_driver_path = "/usr/bin/chromedriver"  # Make sure the path is correct
     chrome_extension_path = "buster.crx"  # Path to Buster extension
