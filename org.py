@@ -1,94 +1,66 @@
 import pandas as pd
 import json
 
-# Função para formatar o nome do município
-def formatar_municipio(municipio):
-    if municipio is None:
-        return ''
-    else:
-        return f"{municipio['nome']}/SE"
+# Função para normalizar a coluna 'enderecos'
+def normalizar_enderecos(enderecos):
+    if isinstance(enderecos, list) and len(enderecos) > 0:
+        endereco = enderecos[0]  # Considerando o primeiro endereço da lista
+        logradouro = endereco.get('logradouro', '')
+        bairro = endereco.get('bairro', '')
+        numero = endereco.get('numero', '')
+        municipio = endereco.get('municipio', {}).get('nome', '')
+        estado = endereco.get('estado', {}).get('sigla', '')
+        return f"{logradouro}, {numero}, {bairro}, {municipio}/{estado}"
+    return ''
 
-# Lista para armazenar os dados que serão convertidos em um DataFrame
+# Função para processar cada objeto JSON individualmente
+def process_json_line(json_line):
+    item = json.loads(json_line)
+    id = item.get('id', '')
+    response = item.get('response', {})
+    pessoa = response.get('pessoa', {})
+    enderecos = pessoa.get('enderecos', [])
+    endereco_1 = normalizar_enderecos(enderecos)
+    tipificacao_penal = [tp.get('rotulo', '') for tp in response.get('tipificacaoPenal', [])]
+
+    return {
+        "id": id,
+        "tipificacaoPenal": tipificacao_penal,
+        "endereco_1": endereco_1 if endereco_1 else ''
+    }
+
+# Lendo o arquivo JSON linha por linha
+file_path = 'output/3.todas_respostas.json'
 dados = []
 
-# Abre o arquivo e lê linha por linha
-with open('output/3.todas_respostas.txt', 'r') as f:
-    # Carrega o conteúdo do arquivo como JSON
-    data = f.read()
-    # Divide o conteúdo do arquivo em linhas
-    lines = data.strip().split('\n')
-    # Itera sobre cada linha
-    for line in lines:
-        # Carrega a linha como um objeto JSON
-        try:
-            obj = json.loads(line)
-        except json.JSONDecodeError as e:
-            print(f"Erro ao decodificar JSON: {e}")
-            continue
-        
-        # Extrai os dados de interesse
-        id = obj.get('id')
-        tipificacao_penal = obj.get('tipificacaoPenal', [{}])[0].get('rotulo', '').split(',')[0]  # Pega apenas o código da tipificação penal
+with open(file_path, 'r', encoding='utf-8') as f:
+    for line in f:
+        line = line.strip()
+        if line:  # Ignorar linhas vazias
+            dados.append(process_json_line(line))
 
-        # Extrai os endereços da pessoa
-        enderecos = obj.get('pessoa', {}).get('enderecos', [])
-
-        # Se não houver endereços, adiciona um dicionário vazio
-        if not enderecos:
-            enderecos = [{}]
-
-        # Pega o primeiro endereço
-        primeiro_endereco = enderecos[0]
-
-        # Constrói o endereço 1
-        endereco_1 = ", ".join(filter(None, [
-            primeiro_endereco.get("logradouro", ''),
-            primeiro_endereco.get("bairro", ''),
-            str(primeiro_endereco.get("numero", '')),
-            primeiro_endereco.get("complemento", ''),
-            str(primeiro_endereco.get("cep", '')),
-            formatar_municipio(primeiro_endereco.get("municipio"))
-        ]))
-
-        # Pega o segundo endereço, se existir
-        if len(enderecos) > 1:
-            segundo_endereco = enderecos[1]
-            # Constrói o endereço 2
-            endereco_2 = ", ".join(filter(None, [
-                segundo_endereco.get("logradouro", ''),
-                segundo_endereco.get("bairro", ''),
-                str(segundo_endereco.get("numero", '')),
-                segundo_endereco.get("complemento", ''),
-                str(segundo_endereco.get("cep", '')),
-                formatar_municipio(segundo_endereco.get("municipio"))
-            ]))
-        else:
-            endereco_2 = None
-
-        # Adiciona os dados ao DataFrame
-        dados.append({
-            "id": id,
-            "tipificacaoPenal": tipificacao_penal,
-            "endereco_1": endereco_1 if endereco_1 != '' else None,
-            "endereco_2": endereco_2 if endereco_2 != '' else None
-        })
-
-# Cria o DataFrame a partir dos dados
+# Criando o DataFrame
 df = pd.DataFrame(dados)
 
-# Salva o DataFrame em um arquivo Excel
-df.to_excel('output/resultado_final.xlsx', index=False)
+# Alterações nas colunas 'endereco_1' e 'tipificacaoPenal'
+df['endereco_1'] = df['endereco_1'].str.replace('/None', '')
+df['endereco_1'] = df['endereco_1'].str.replace('None,', '')
+df['endereco_1'] = df['endereco_1'].str.replace(', None', '')
+df['endereco_1'] = df['endereco_1'].str.replace(', ,', ',')
+df['endereco_1'] = df['endereco_1'].str.upper()
+def extract_first_tipificacao(tipificacoes):
+    if tipificacoes:
+        first_tipificacao = tipificacoes[0]
+        return first_tipificacao.split(';')[0]
+    return ''
 
-# Lê o arquivo Excel salvo
-df = pd.read_excel('output/4.resultado_final.xlsx')
+df['tipificacaoPenal'] = df['tipificacaoPenal'].apply(lambda x: [extract_first_tipificacao(x)])
 
-# Remove as partes indesejadas nos endereços do DataFrame
-df['endereco_1'] = df['endereco_1'].str.replace(', None/SE', '').str.replace(', None', '')
-df['endereco_2'] = df['endereco_2'].str.replace(', None/SE', '').str.replace(', None', '')
+# Salvando em um arquivo Excel
+output_file_path = 'output/4.dados_finais.xlsx'
+df.to_excel(output_file_path, index=False)
 
-# Salva o DataFrame atualizado em um novo arquivo Excel
-df.to_excel('output/4.resultado_final', index=False)
 
-print('Arquivo Excel criado com sucesso, com as partes indesejadas removidas.')
+print('Processo Finalizado')
 
-#implementar a api
+
