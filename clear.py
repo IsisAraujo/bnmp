@@ -1,6 +1,11 @@
 import pandas as pd
 import json
+import subprocess 
+    # Executar o script de limpeza após a raspagem
+    print("Executando script de limpeza...")
+    subprocess.run(["python", "clear.py"])
 
+    print('Processo Finalizado')
 # Função para normalizar a coluna 'enderecos'
 def normalizar_enderecos(enderecos):
     if isinstance(enderecos, list) and len(enderecos) > 0:
