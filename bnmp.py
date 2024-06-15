@@ -2,34 +2,35 @@ import os
 import json
 import pandas as pd
 import requests
+from selenium.webdriver.common.keys import Keys
 from selenium import webdriver
+from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.action_chains import ActionChains
+from selenium.common.exceptions import NoSuchElementException
+from openpyxl.workbook import Workbook
 import time
 import random
+import subprocess 
 
-# Diretório e arquivos de saída / Output directory and files
 OUTPUT_DIR = 'output'
-OUTPUT_FILE = os.path.join(OUTPUT_DIR, '1.general_data.json')
-EXCEL_FILE = os.path.join(OUTPUT_DIR, '2.general_data.xlsx')
-RESPONSES_FILE = os.path.join(OUTPUT_DIR, '3.all_responses.json')
-
-# URL da API BNMP e constantes / BNMP API URL and constants
+OUTPUT_FILE = 'output/1.dados_gerais.json'
+EXCEL_FILE = 'output/2.dados_gerais.xlsx'
 BNMP_URL = 'https://portalbnmp.cnj.jus.br/bnmpportal/api/pesquisa-pecas/filter'
 MAX_ITEMS_PER_PAGE = 30
 RENEW_REQUEST_THRESHOLD = 40
-REFRESH_THRESHOLD = 200
+MAX_ITEMS_PER_PAGE = 30
+REFRESH_THRESHOLD = 40
 MAX_REQUESTS_BEFORE_PAUSE = 50
+RESPONSES_FILE = 'output/3.todas_respostas.json'
 
-# Cabeçalhos HTTP / HTTP headers
 HEADERS = {
     'User-Agent': (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, como Gecko) Chrome/86.0.4240.198 Safari/537.36"
+        "(KHTML, like Gecko) Chrome/86.0.4240.198 Safari/537.36"
     )
 }
-
-# Mapeamento de descrições de peças para seus IDs / Mapping of piece descriptions to their IDs
 PECA_MAP = {
     "Mandado de Prisão": 1,
     "Contramandado": 2,
@@ -51,16 +52,12 @@ class BNMPScraper:
     def __init__(self, cookies, driver):
         self.cookies = cookies
         self.params = {'page': '0', 'size': str(MAX_ITEMS_PER_PAGE), 'sort': ''}
-        self.json_data = {'recursiveSearchAgency': False, 'issuingAgency': {}, 'stateId': 25}
+        self.json_data = {'buscaOrgaoRecursivo': False, 'orgaoExpeditor': {}, 'idEstado': 25}
         self.driver = driver
-        self.processed_ids_count = 0  # Inicializa o contador de IDs processados / Initialize processed IDs counter
-        self.request_count = 0  # Inicializa o contador de requisições / Initialize request counter
+        self.processed_ids_count = 0
+        self.request_count = 0
 
     def make_request(self):
-        """
-        Faz uma requisição POST para a API da BNMP e trata exceções.
-        Make a POST request to BNMP API and handle exceptions.
-        """
         try:
             response = requests.post(
                 BNMP_URL,
@@ -72,52 +69,30 @@ class BNMPScraper:
             response.raise_for_status()
             return response
         except requests.exceptions.RequestException as e:
-            print(f"Erro ao fazer a requisição: {e}")
             print(f"Error making request: {e}")
             return None
 
-    @staticmethod
-    def random_pause():
-        """
-        Pausa por uma duração aleatória entre as requisições.
-        Pause for a random duration between requests.
-        """
-        time.sleep(random.uniform(1, 3))  # Pausa entre 1 e 3 segundos / Pause between 1 and 3 seconds
-
     def scrape(self):
-        """
-        Extrai dados da BNMP, salva arquivos JSON e Excel, e gerencia paginação e atualização.
-        Scrape data from BNMP, save JSON and Excel files, and handle pagination and refreshing.
-        """
         page = 0
         page_count = 0
         all_data = []
-        consecutive_401_count = 0  # Contador de respostas 401 consecutivas / Counter for consecutive 401 responses
+        consecutive_401_count = 0
 
         while True:
             self.params['page'] = str(page)
             response = self.make_request()
-            self.request_count += 1
-
-            if self.request_count % 60 == 0:
-                print(f"Pausando após {self.request_count} requisições...")
-                print(f"Pausing after {self.request_count} requests...")
-                time.sleep(random.uniform(60, 120))  # Pausa entre 1 e 2 minutos / Pause between 1 and 2 minutes
-
             if not response:
                 break
 
             if response.status_code == 401:
                 consecutive_401_count += 1
-                if consecutive_401_count >= 5:  # Define um limite para a detecção de bloqueio / Set a limit for blocking detection
-                    print("Bloqueado pelo servidor. Encerrando o processo de extração.")
+                if consecutive_401_count >= 5:
                     print("Blocked by server. Exiting scraping process.")
                     break
             else:
-                consecutive_401_count = 0  # Reseta o contador / Reset the counter
+                consecutive_401_count = 0
 
             if response.status_code != 200:
-                print(f"Código de status inesperado: {response.status_code}. Encerrando o processo de extração.")
                 print(f"Unexpected status code: {response.status_code}. Exiting scraping process.")
                 break
 
@@ -128,127 +103,122 @@ class BNMPScraper:
 
             if page_count == RENEW_REQUEST_THRESHOLD:
                 page_count = 0
-                print("Renovando requisição...")
                 print("Renewing request...")
-                self.driver.refresh()  # Atualiza a página / Refreshing the page
+                self.driver.refresh()
 
-            print(f"Página {page} processada com sucesso.")
             print(f"Successfully processed page {page}")
 
             if len(items) < MAX_ITEMS_PER_PAGE:
                 break
-
-            self.random_pause()
-
+            if self.processed_ids_count >= 30:
+                print("Limite de 30 entradas atingido. Encerrando o processo de scraping.")
+                break
         self.save_json(all_data)
         self.save_excel(all_data)
-        self.refresh_browser()
-        self.process_excel()
-
-    def process_excel(self):
-        """
-        Processa o arquivo Excel para mapear descrições de peças para seus IDs e buscar dados.
-        Process the Excel file to map piece descriptions to their IDs and fetch data.
-        """
         df = pd.read_excel(EXCEL_FILE)
         df['peca_id'] = df['descricaoPeca'].map(PECA_MAP)
 
         for idx, row in df.iterrows():
-            id_value = row['id']
-            piece_description = row['descricaoPeca']
-            piece_id = row['peca_id']
 
-            if piece_id:
-                response = self.fetch_data_by_id_and_piece(id_value, piece_id)
+
+            id_valor = row['id']
+            descricao_peca = row['descricaoPeca']
+            peca_id = row['peca_id']
+
+            if peca_id:
+                response = self.fetch_data_by_id_and_peca(id_valor, peca_id)
                 result = {
-                    "id": id_value,
-                    "piece": piece_description,
+                    "id": id_valor,
+                    "peca": descricao_peca,
                     "response": response
                 }
             else:
                 result = {
-                    "id": id_value,
-                    "piece": piece_description,
-                    "error": f"Peça '{piece_description}' não encontrada no dicionário de peças."
-                              f"Piece '{piece_description}' not found in piece dictionary."
+                    "id": id_valor,
+                    "peca": descricao_peca,
+                    "error": f"Peça '{descricao_peca}' não encontrada no dicionário de peças."
                 }
             self.save_response(result)
 
             self.processed_ids_count += 1
+            self.request_count += 1
+
+            
+            if self.request_count % MAX_REQUESTS_BEFORE_PAUSE == 0:
+                print(f"Pausando após {self.request_count} requisições...")
+
             if self.processed_ids_count % REFRESH_THRESHOLD == 0:
                 self.refresh_browser()
 
-    def fetch_data_by_id_and_piece(self, id_value, piece_id):
-        """
-        Busca dados pelo ID e ID da peça na API da BNMP e trata erros.
-        Fetch data by ID and piece ID from BNMP API and handle errors.
-        """
-        html_url = f'https://portalbnmp.cnj.jus.br/#/resumo-peca/{id_value}/{piece_id}/%2Fpesquisa-peca'
-        json_url = f'https://portalbnmp.cnj.jus.br/bnmpportal/api/certidaos/{id_value}/{piece_id}'
+    def fetch_data_by_id_and_peca(self, id_valor, peca_id):
+        html_url = f'https://portalbnmp.cnj.jus.br/#/resumo-peca/{id_valor}/{peca_id}/%2Fpesquisa-peca'
+        json_url = f'https://portalbnmp.cnj.jus.br/bnmpportal/api/certidaos/{id_valor}/{peca_id}'
 
-        html_response = requests.get(html_url, cookies=self.cookies, headers=HEADERS)
-        if html_response.status_code == 200:
-            json_response = requests.get(json_url, cookies=self.cookies, headers=HEADERS)
-            if json_response.status_code == 200:
-                try:
-                    return json_response.json()
-                except json.JSONDecodeError:
-                    return {"erro": f"Erro ao decodificar JSON para ID {id_value}, ID da peça {piece_id}. "
-                                    f"Resposta: {json_response.text}",
-                            "error": f"Error decoding JSON for ID {id_value}, Piece ID {piece_id}. "
-                                     f"Response: {json_response.text}"}
-            else:
-                return {"erro": f"Erro ao obter dados JSON para ID {id_value}, ID da peça {piece_id}: "
-                                f"Código de status {json_response.status_code}",
-                        "error": f"Error getting JSON data for ID {id_value}, Piece ID {piece_id}: "
-                                 f"Status {json_response.status_code}"}
-        else:
-            return {"erro": f"Erro ao obter HTML para ID {id_value}, ID da peça {piece_id}: "
-                            f"Código de status {html_response.status_code}",
-                    "error": f"Error getting HTML for ID {id_value}, Piece ID {piece_id}: "
-                             f"Status {html_response.status_code}"}
+        max_retries = 5
+        backoff_factor = 2
+
+        for attempt in range(max_retries):
+            try:
+                html_response = requests.get(html_url, cookies=self.cookies, headers=HEADERS)
+                html_status_code = html_response.status_code
+                print(f"Requisição HTML para o ID {id_valor}, Peça ID {peca_id} feita... Status {html_status_code}")
+
+                if html_status_code == 200:
+                    json_response = requests.get(json_url, cookies=self.cookies, headers=HEADERS)
+                    json_status_code = json_response.status_code
+                    print(f"Requisição JSON para o ID {id_valor}, Peça ID {peca_id} feita... Status {json_status_code}")
+
+                    if json_status_code == 200:
+                        try:
+                            return json_response.json()
+                        except json.JSONDecodeError:
+                            return {"error": f"Erro ao decodificar JSON para o ID {id_valor}, Peça ID {peca_id}. Resposta: {json_response.text}"}
+                    elif json_status_code == 401:
+                        self.handle_captcha()
+                        continue
+                    else:
+                        return {"error": f"Erro ao obter dados JSON para o ID {id_valor}, Peça ID {peca_id}: Status {json_status_code}"}
+                elif html_status_code == 401:
+                    self.handle_captcha()
+                    continue
+                else:
+                    return {"error": f"Erro ao obter HTML para o ID {id_valor}, Peça ID {peca_id}: Status {html_status_code}"}
+            except requests.RequestException as e:
+                print(f"Tentativa {attempt + 1} falhou: {e}. Retentando em {backoff_factor ** attempt} segundos.")
+                time.sleep(backoff_factor ** attempt)
+
+        return {"error": f"Falha ao obter dados para o ID {id_valor}, Peça ID {peca_id} após {max_retries} tentativas."}
 
     def refresh_browser(self):
-        """
-        Atualiza a página do portal BNMP usando Selenium WebDriver.
-        Refresh the BNMP portal page using Selenium WebDriver.
-        """
-        self.driver.get('https://portalbnmp.cnj.jus.br/')
-        time.sleep(2)  # Espera 2 segundos para a página carregar completamente / Wait 2 seconds for the page to fully load
+        url = 'https://portalbnmp.cnj.jus.br/'
+        self.driver.get(url)
+        time.sleep(10)  # Esperar 10 segundos para garantir que a página carregue
+
+    def handle_captcha(self):
+        self.driver.get("https://portalbnmp.cnj.jus.br/#/captcha/")
+        input("Por favor, resolva o CAPTCHA e pressione Enter para continuar...")
+        self.cookies = {cookie['name']: cookie['value'] for cookie in self.driver.get_cookies()}
 
     def save_response(self, result):
-        """
-        Salva a resposta individual em um arquivo JSON.
-        Save individual response to a JSON file.
-        """
-        os.makedirs(OUTPUT_DIR, exist_ok=True)
         with open(RESPONSES_FILE, 'a', encoding='utf-8') as file:
             json.dump(result, file, ensure_ascii=False)
             file.write('\n')
 
     def save_json(self, data):
-        """
-        Salva os dados extraídos em um arquivo JSON.
-        Save scraped data to a JSON file.
-        """
         os.makedirs(OUTPUT_DIR, exist_ok=True)
         with open(OUTPUT_FILE, 'w', encoding='utf-8') as file:
             json.dump(data, file, ensure_ascii=False, indent=4)
-
+  
     @staticmethod
     def save_excel(data):
-        """
-        Salva os dados extraídos em um arquivo Excel.
-        Save scraped data to an Excel file.
-        """
         os.makedirs(OUTPUT_DIR, exist_ok=True)
         df = pd.DataFrame(data).drop(columns=['dataExpedicao', 'dataNascimento'], errors='ignore')
         df.to_excel(EXCEL_FILE, index=False)
         print(f"Arquivo '{EXCEL_FILE}' criado com sucesso.")
-        print(f"File '{EXCEL_FILE}' created successfully.")
 
 if __name__ == "__main__":
-    chrome_driver_path = "/usr/bin/chromedriver"
+    #chrome_driver_path = "/usr/bin/chromedriver"para linux
+    chrome_driver_path = "C:\webdriver\chromedriver.exe"
 
     chrome_options = Options()
     service = Service(chrome_driver_path)
@@ -256,7 +226,6 @@ if __name__ == "__main__":
 
     driver.get("https://portalbnmp.cnj.jus.br/#/captcha/")
 
-    input("Pressione Enter após resolver o CAPTCHA manualmente...")
     input("Press Enter after you have solved the CAPTCHA manually...")
 
     cookies = driver.get_cookies()
@@ -266,3 +235,10 @@ if __name__ == "__main__":
     scraper.scrape()
 
     driver.quit()
+
+    # Executar o script de limpeza após a raspagem
+    print("Executando analise de erros...")
+    subprocess.run(["python", "error_check.py"])
+
+    print('Processo Finalizado')
+

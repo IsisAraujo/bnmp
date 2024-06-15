@@ -3,10 +3,9 @@ import pandas as pd
 import json
 from openpyxl.workbook import Workbook
 
-# Função para normalizar a coluna 'enderecos'
 def normalizar_enderecos(enderecos):
     if isinstance(enderecos, list) and len(enderecos) > 0:
-        endereco = enderecos[0]  # Considerando o primeiro endereço da lista
+        endereco = enderecos[0]
         logradouro = endereco.get('logradouro', '')
         bairro = endereco.get('bairro', '')
         numero = endereco.get('numero', '')
@@ -15,13 +14,11 @@ def normalizar_enderecos(enderecos):
         return f"{logradouro}, {numero}, {bairro}, {municipio}/{estado}"
     return ''
 
-# Função para processar cada objeto JSON individualmente
 def process_json_line(json_line):
     item = json.loads(json_line)
     id = item.get('id', '')
     response = item.get('response', {})
     
-    # Verificar se há um erro na resposta
     if 'error' in response:
         return None, {
             "id": id,
@@ -40,26 +37,23 @@ def process_json_line(json_line):
         "endereco_1": endereco_1 if endereco_1 else ''
     }, None
 
-# Lendo o arquivo JSON linha por linha
-file_path = 'output/5.merged_respostas.json'
+file_path = 'output/3.todas_respostas.json'
 dados = []
 erros = []
 
 with open(file_path, 'r', encoding='utf-8') as f:
     for line in f:
         line = line.strip()
-        if line:  # Ignorar linhas vazias
+        if line:
             dado, erro = process_json_line(line)
             if dado:
                 dados.append(dado)
             if erro:
                 erros.append(erro)
 
-# Criando os DataFrames
 df_dados = pd.DataFrame(dados)
 df_erros = pd.DataFrame(erros)
 
-# Alterações nas colunas 'endereco_1' e 'tipificacaoPenal' do DataFrame df_dados
 df_dados['endereco_1'] = df_dados['endereco_1'].str.replace('/None', '')
 df_dados['endereco_1'] = df_dados['endereco_1'].str.replace('None,', '')
 df_dados['endereco_1'] = df_dados['endereco_1'].str.replace(', None', '')
@@ -74,8 +68,25 @@ def extract_first_tipificacao(tipificacoes):
 
 df_dados['tipificacaoPenal'] = df_dados['tipificacaoPenal'].apply(lambda x: [extract_first_tipificacao(x)])
 
-# Salvando em arquivos Excel separados
-output_file_path_dados = 'output/4.dados_finais.xlsx'
-output_file_path_erros = 'output/4.dados_erros.xlsx'
-df_dados.to_excel(output_file_path_dados, index=False)
+output_file_path_erros = 'output/4.dados_erros.xlsx'  # Adicionada a extensão .xlsx
 df_erros.to_excel(output_file_path_erros, index=False)
+
+print('Processo Finalizado')
+
+    # Executar o script de limpeza após a raspagem
+print("Extraindo o Json dos arquivos com erros..")
+subprocess.run(["python", "error_check_json.py"])
+
+print('Processo Finalizado')
+
+    # mesclando Json
+print("Mesclando Json")
+subprocess.run(["python", "mescla_json.py"])
+
+print('Processo Finalizado')
+
+#criando o dataset para usar no api maps parra tirar lat long
+print("Criando o dataset para usar no api maps..")
+subprocess.run(["python", "clear.py"])
+
+print('Processo Finalizado')

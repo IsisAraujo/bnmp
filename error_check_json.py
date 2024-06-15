@@ -9,10 +9,11 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
+
 # Diretório de saída e arquivo Excel
 OUTPUT_DIR = 'output'
-EXCEL_FILE = 'output/2.dados_gerais.xlsx'
-RESPONSES_FILE = 'output/3.todas_respostas.json'
+EXCEL_FILE = 'output/4.dados_erros.xlsx'
+RESPONSES_FILE = 'output/4.1dados_erros.json'
 
 # URL da API da BNMP e constantes
 BNMP_URL = 'https://portalbnmp.cnj.jus.br/bnmpportal/api/pesquisa-pecas/filter'
@@ -123,11 +124,11 @@ class BNMPScraper:
         Scrape data from BNMP, save JSON and handle pagination and refreshing.
         """
         df = pd.read_excel(EXCEL_FILE)
-        df['peca_id'] = df['descricaoPeca'].map(PECA_MAP)
+        df['peca_id'] = df['peca'].map(PECA_MAP)
 
         for idx, row in df.iterrows():
             id_valor = row['id']
-            descricao_peca = row['descricaoPeca']
+            descricao_peca = row['peca']
             peca_id = row['peca_id']
 
             if peca_id:
