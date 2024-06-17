@@ -1,7 +1,7 @@
 import pandas as pd
 import googlemaps
 from tqdm import tqdm
-
+"""
 # Função para geocodificar um único endereço
 def geocode_address(address, gmaps):
     if pd.isna(address) or address == '':
@@ -23,7 +23,7 @@ input_file_path = 'output/4.dados_finais.xlsx'
 df = pd.read_excel(input_file_path)
 
 # Inicializando o cliente Google Maps
-gmaps = googlemaps.Client(key='*')  # Substitua com sua chave de API
+gmaps = googlemaps.Client(key='AIzaSyCTOQRQx03Um2QIGZAzp_vfawjT0PbTOos')  # Substitua com sua chave de API
 
 # Adicionando a barra de progresso
 latitudes = []
@@ -43,9 +43,10 @@ output_file_path = 'output/5.1.dados_geocodificados.xlsx'
 df.to_excel(output_file_path, index=False)
 
 print('Geocodificação concluída e dados salvos em', output_file_path)
+"""
 
 # Carregar os DataFrames dos arquivos
-file_dados_geocodificados = 'output/5.1dados_geocodificados.xlsx'
+file_dados_geocodificados = 'output/5.1.dados_geocodificados.xlsx'
 file_dados_gerais = 'output/2.dados_gerais.xlsx'
 
 df_geocodificados = pd.read_excel(file_dados_geocodificados)

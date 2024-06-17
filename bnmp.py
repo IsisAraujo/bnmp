@@ -241,4 +241,28 @@ if __name__ == "__main__":
     subprocess.run(["python", "error_check.py"])
 
     print('Processo Finalizado')
+    
+    driver.quit()
 
+ # Executar o script de limpeza após a raspagem
+print("Extraindo o Json dos arquivos com erros..")
+subprocess.run(["python", "error_check_json.py"])
+
+print('Limpeza dos Erros Feita com sucesso...')
+
+print("Mesclando Json")
+subprocess.run(["python", "mescla_json.py"])
+
+print('Json Mesclado com sucesso!')
+
+
+print("Ajustando o dataset para usar no api maps..")
+subprocess.run(["python", "clear.py"])
+
+print('Processo Finalizado')
+
+
+print("Gerando lat e Long..")
+subprocess.run(["python", "clear.py"])
+
+print('Coluna, Lat e Long criada e arquivo final disponível.')

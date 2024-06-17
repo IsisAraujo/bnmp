@@ -95,14 +95,6 @@ class BNMPScraper:
 
         return {"error": f"Falha ao obter dados para o ID {id_valor}, Peça ID {peca_id} após {max_retries} tentativas."}
 
-    def refresh_browser(self):
-        """
-        Refresh the BNMP portal page using Selenium WebDriver.
-        """
-        url = 'https://portalbnmp.cnj.jus.br/'
-        self.driver.get(url)
-        WebDriverWait(self.driver, 10).until(EC.presence_of_element_located((By.ID, 'id-of-element-on-next-page')))
-
     def handle_captcha(self):
         """
         Handle CAPTCHA by prompting the user to solve it manually.
@@ -153,17 +145,17 @@ class BNMPScraper:
                 print(f"Pausando após {self.request_count} requisições...")
 
             if self.processed_ids_count % REFRESH_THRESHOLD == 0:
-                self.refresh_browser()
+                print(f"Processados {self.processed_ids_count} IDs, atingido limite de atualizações.")
 
 if __name__ == "__main__":
-    chrome_driver_path = "/usr/bin/chromedriver"
+    chrome_driver_path = "C:\webdriver\chromedriver.exe"
 
     chrome_options = Options()
     service = Service(chrome_driver_path)
     driver = webdriver.Chrome(service=service, options=chrome_options)
 
     driver.get("https://portalbnmp.cnj.jus.br/#/captcha/")
-    input("Press Enter after you have solved the CAPTCHA manually...")
+    input("Pressione Enter após resolver o CAPTCHA manualmente...")
 
     cookies = driver.get_cookies()
     cookies_dict = {cookie['name']: cookie['value'] for cookie in cookies}
@@ -171,4 +163,5 @@ if __name__ == "__main__":
     scraper = BNMPScraper(cookies_dict, driver)
     scraper.scrape()
 
+    # Fechar o navegador após a conclusão
     driver.quit()

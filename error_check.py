@@ -73,20 +73,4 @@ df_erros.to_excel(output_file_path_erros, index=False)
 
 print('Processo Finalizado')
 
-    # Executar o script de limpeza após a raspagem
-print("Extraindo o Json dos arquivos com erros..")
-subprocess.run(["python", "error_check_json.py"])
 
-print('Processo Finalizado')
-
-    # mesclando Json
-print("Mesclando Json")
-subprocess.run(["python", "mescla_json.py"])
-
-print('Processo Finalizado')
-
-#criando o dataset para usar no api maps parra tirar lat long
-print("Criando o dataset para usar no api maps..")
-subprocess.run(["python", "clear.py"])
-
-print('Processo Finalizado')

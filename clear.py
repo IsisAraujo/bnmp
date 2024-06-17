@@ -1,4 +1,3 @@
-import subprocess
 import pandas as pd
 import json
 from openpyxl.workbook import Workbook
@@ -14,6 +13,13 @@ def normalizar_enderecos(enderecos):
         estado = endereco.get('estado', {}).get('sigla', '')
         return f"{logradouro}, {numero}, {bairro}, {municipio}/{estado}"
     return ''
+
+# Função para buscar o CPF no documento
+def buscar_cpf(documentos):
+    for documento in documentos:
+        if documento.get('tipoDocumento', {}).get('descricao') == 'CPF':
+            return documento.get('numero')
+    return None
 
 # Função para processar cada objeto JSON individualmente
 def process_json_line(json_line):
@@ -33,11 +39,13 @@ def process_json_line(json_line):
     enderecos = pessoa.get('enderecos', [])
     endereco_1 = normalizar_enderecos(enderecos)
     tipificacao_penal = [tp.get('rotulo', '') for tp in response.get('tipificacaoPenal', [])]
+    cpf = buscar_cpf(pessoa.get('documento', []))
 
     return {
         "id": id,
         "tipificacaoPenal": tipificacao_penal,
-        "endereco_1": endereco_1 if endereco_1 else ''
+        "endereco_1": endereco_1 if endereco_1 else '',
+        "cpf": cpf
     }, None
 
 # Lendo o arquivo JSON linha por linha
@@ -79,3 +87,5 @@ output_file_path_dados = 'output/4.dados_finais.xlsx'
 output_file_path_erros = 'output/4.dados_erros.xlsx'
 df_dados.to_excel(output_file_path_dados, index=False)
 df_erros.to_excel(output_file_path_erros, index=False)
+
+print('Processo Finalizado')
