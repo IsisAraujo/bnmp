@@ -263,6 +263,6 @@ print('Processo Finalizado')
 
 
 print("Gerando lat e Long..")
-subprocess.run(["python", "clear.py"])
+subprocess.run(["python", "address.py"])
 
 print('Coluna, Lat e Long criada e arquivo final disponível.')

@@ -45,18 +45,32 @@ df.to_excel(output_file_path, index=False)
 print('Geocodificação concluída e dados salvos em', output_file_path)
 """
 
-# Carregar os DataFrames dos arquivos
+
+
+# Carregar os DataFrames dos arquivos, garantindo que a coluna 'cpf' seja tratada como string
 file_dados_geocodificados = 'output/5.1.dados_geocodificados.xlsx'
 file_dados_gerais = 'output/2.dados_gerais.xlsx'
 
-df_geocodificados = pd.read_excel(file_dados_geocodificados)
-df_gerais = pd.read_excel(file_dados_gerais)
+df_geocodificados = pd.read_excel(file_dados_geocodificados, dtype={'cpf': str}, engine='openpyxl')
+df_gerais = pd.read_excel(file_dados_gerais, dtype={'cpf': str}, engine='openpyxl')
 
 # Realizar o merge pelos IDs
 df_merged = pd.merge(df_gerais, df_geocodificados, on='id', how='left')
 
 # Salvando o DataFrame resultante em um novo arquivo Excel
 output_merged_file = 'output/6.mandados_com_endereco.xlsx'
-df_merged.to_excel(output_merged_file, index=False)
+df_merged.to_excel(output_merged_file, index=False, engine='openpyxl')
 
 print('Merge realizado com sucesso.')
+
+# Carregar o arquivo Excel resultante
+df = pd.read_excel(output_merged_file, dtype={'cpf': str}, engine='openpyxl')
+
+# Verificar duplicatas no campo 'id' e manter apenas a primeira ocorrência
+df_no_duplicates = df.drop_duplicates(subset='id', keep='first')
+
+# Salvar o resultado em uma nova planilha Excel
+output_file_path = 'output/7.mandados_bnmp.xlsx'
+df_no_duplicates.to_excel(output_file_path, index=False, engine='openpyxl')
+
+print(f"Arquivo salvo em: {output_file_path}")

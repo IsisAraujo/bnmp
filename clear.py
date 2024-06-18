@@ -18,7 +18,9 @@ def normalizar_enderecos(enderecos):
 def buscar_cpf(documentos):
     for documento in documentos:
         if documento.get('tipoDocumento', {}).get('descricao') == 'CPF':
-            return documento.get('numero')
+            cpf = documento.get('numero')
+            if cpf:
+                return str(cpf).zfill(11)  # Garantir que o CPF tenha 11 dígitos, incluindo zeros à esquerda
     return None
 
 # Função para processar cada objeto JSON individualmente
@@ -89,3 +91,6 @@ df_dados.to_excel(output_file_path_dados, index=False)
 df_erros.to_excel(output_file_path_erros, index=False)
 
 print('Processo Finalizado')
+
+
+
